@@ -1,8 +1,12 @@
 import streamlit as st
 import pandas as pd
+import random
 
 # Configuration
-st.set_page_config(page_title="Tarot Master - Club des Experts", layout="wide")
+st.set_page_config(page_title="Tarot Master Pro", layout="wide")
+
+# Liste d'avatars possibles
+LISTE_AVATARS = ["🧙", "🥷", "🧛", "🤴", "👸", "🤡", "👹", "🤠", "🤖", "👻", "👽", "🦄", "🐼", "🦊", "🦁"]
 
 # --- INITIALISATION ---
 if 'historique' not in st.session_state:
@@ -11,154 +15,121 @@ if 'joueurs' not in st.session_state:
     st.session_state.joueurs = [f"Joueur {i+1}" for i in range(5)]
 if 'avatars' not in st.session_state:
     st.session_state.avatars = ["👤"] * 5
+if 'compteur_donne' not in st.session_state:
+    st.session_state.compteur_donne = 0
 
-# --- FONCTION DE CALCUL ---
-def calculer_points(contrat, points_faits, bouts, petit_au_bout, poignees_dict, nb_joueurs, type_partage, partenaire, preneur, miseres, chelem_type):
+# --- FONCTIONS ---
+def changer_avatar(idx):
+    st.session_state.avatars[idx] = random.choice(LISTE_AVATARS)
+
+def calculer_points(contrat, pts, bouts, petit_bout, poignees, nb_j, partage, part, preneur, miseres, chelem):
+    # Base du calcul
     seuils = {0: 56, 1: 51, 2: 41, 3: 36}
-    seuil = seuils[bouts]
-    diff = points_faits - seuil
+    diff = pts - seuils[bouts]
     reussi = diff >= 0
-    
     score_base = 25 + abs(diff)
-    if petit_au_bout: score_base += 10
+    if petit_bout: score_base += 10
     
     coeffs = {"Petite": 1, "Pousse": 2, "Garde": 4, "Garde Sans": 8, "Garde Contre": 16}
     score_final = score_base * coeffs[contrat]
     
-    # Primes de Chelem
-    primes_chelem = {
-        "Aucun": 0, "Grand Chelem Annoncé & Réussi": 400, "Grand Chelem Non annoncé & Réussi": 200,
-        "Grand Chelem Annoncé & Chuté": -200, "Petit Chelem Annoncé & Réussi": 200,
-        "Petit Chelem Non annoncé & Réussi": 100, "Petit Chelem Annoncé & Chuté": -100
-    }
-    score_final += primes_chelem[chelem_type]
+    # Primes Chelem
+    primes_ch = {"Aucun": 0, "Grand Chelem Annoncé & Réussi": 400, "Grand Chelem Non annoncé & Réussi": 200, "Grand Chelem Annoncé & Chuté": -200, "Petit Chelem Annoncé & Réussi": 200, "Petit Chelem Non annoncé & Réussi": 100, "Petit Chelem Annoncé & Chuté": -100}
+    score_final += primes_ch[chelem]
 
-    # Calcul de base (Attaque vs Défense)
-    resultats = {nom: 0 for nom in st.session_state.joueurs}
+    res = {nom: 0 for nom in st.session_state.joueurs}
     
-    if nb_joueurs == 4:
-        p_total = score_final * 3 if reussi else -score_final * 3
+    # Partage Attaque / Défense
+    if nb_j == 4:
+        p_tot = score_final * 3 if reussi else -score_final * 3
         for j in st.session_state.joueurs:
-            resultats[j] = p_total if j == preneur else -(p_total / 3)
-    else: # 5 joueurs
-        if partenaire == preneur or partenaire == "Au Chien / Seul":
-            p_total = score_final * 4 if reussi else -score_final * 4
+            res[j] = p_tot if j == preneur else -(p_tot / 3)
+    else:
+        if part == preneur or part == "Au Chien / Seul":
+            p_tot = score_final * 4 if reussi else -score_final * 4
             for j in st.session_state.joueurs:
-                resultats[j] = p_total if j == preneur else -(p_total / 4)
+                res[j] = p_tot if j == preneur else -(p_tot / 4)
         else:
-            mult = 1.5 if type_partage == "50/50" else 2
-            p_preneur = (score_final * mult) if reussi else -(score_final * mult)
-            p_partenaire = (score_final * (3 - mult)) if reussi else -(score_final * (3 - mult))
+            m = 1.5 if partage == "50/50" else 2
+            p_pre = (score_final * m) if reussi else -(score_final * m)
+            p_par = (score_final * (3 - m)) if reussi else -(score_final * (3 - m))
             for j in st.session_state.joueurs:
-                if j == preneur: resultats[j] = p_preneur
-                elif j == partenaire: resultats[j] = p_partenaire
-                else: resultats[j] = -(p_preneur + p_partenaire) / 3
+                if j == preneur: res[j] = p_pre
+                elif j == part: res[j] = p_par
+                else: res[j] = -(p_pre + p_par) / 3
 
-    # Ajout des Poignées (Prime à celui qui la détient, payée par tous les autres)
-    val_poignee = {"Simple": 20, "Double": 30, "Triple": 40}
-    for j_nom, p_type in poignees_dict.items():
+    # Poignées & Misères
+    val_p = {"Simple": 20, "Double": 30, "Triple": 40}
+    for j_nom, p_type in poignees.items():
         if p_type != "Aucune":
-            prime = val_poignee[p_type]
-            if not reussi: prime = -prime # La poignée suit le sort de l'attaque seulement si elle est au preneur? 
-            # Règle officielle : La poignée est acquise à celui qui la présente, gagnée ou perdue.
-            # Ici on applique : gagnée si le camp de celui qui la présente gagne.
-            
-            # On simplifie : si le camp du détenteur gagne, il prend la prime.
-            camp_attaque = [preneur, partenaire] if nb_joueurs == 5 else [preneur]
-            détenteur_gagne = (reussi and j_nom in camp_attaque) or (not reussi and j_nom not in camp_attaque)
-            
-            valeur = prime if détenteur_gagne else -prime
+            camp_att = [preneur, part] if nb_j == 5 else [preneur]
+            gagne = (reussi and j_nom in camp_att) or (not reussi and j_nom not in camp_att)
+            val = val_p[p_type] if gagne else -val_p[p_type]
             for j in st.session_state.joueurs:
-                if j == j_nom: resultats[j] += valeur * (nb_joueurs - 1)
-                else: resultats[j] -= valeur
-
-    # Misères
+                if j == j_nom: res[j] += val * (nb_j - 1)
+                else: res[j] -= val
     if miseres:
         for j_m in miseres:
             for j in st.session_state.joueurs:
-                if j == j_m: resultats[j] += 10 * (nb_joueurs - 1)
-                else: resultats[j] -= 10
-                
-    return resultats
+                if j == j_m: res[j] += 10 * (nb_j - 1)
+                else: res[j] -= 10
+    return res
 
-# --- SIDEBAR (JOUEURS) ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.title("⚙️ Paramètres")
-    nb_joueurs = st.radio("Nombre de joueurs", [4, 5], horizontal=True)
-    
-    st.write("---")
-    st.subheader("👤 Équipage")
-    for i in range(nb_joueurs):
-        c_av, c_nm = st.columns([1, 3])
-        st.session_state.avatars[i] = c_av.text_input(f"Av{i}", st.session_state.avatars[i], key=f"av_in_{i}", label_visibility="collapsed")
-        st.session_state.joueurs[i] = c_nm.text_input(f"Nom {i+1}", st.session_state.joueurs[i], key=f"nm_in_{i}", label_visibility="collapsed")
-
-    if st.button("🗑️ Reset la partie"):
+    st.title("👥 Joueurs")
+    nb_j = st.radio("Format", [4, 5], horizontal=True)
+    for i in range(nb_j):
+        c1, c2 = st.columns([1, 4])
+        if c1.button(st.session_state.avatars[i], key=f"btn_av_{i}"):
+            changer_avatar(i)
+            st.rerun()
+        st.session_state.joueurs[i] = c2.text_input(f"Nom {i}", st.session_state.joueurs[i], label_visibility="collapsed")
+    if st.button("🗑️ Reset Scores"):
         st.session_state.historique = []
         st.rerun()
 
-# --- INTERFACE PRINCIPALE ---
-st.title("🃏 Tarot Master Pro")
+# --- MAIN ---
+st.title("🃏 Tarot Master")
+k = st.session_state.compteur_donne # Clé pour reset les menus
 
 col1, col2 = st.columns(2)
-
 with col1:
-    st.markdown("### 🏹 L'Attaque")
-    preneur = st.selectbox("Preneur", st.session_state.joueurs)
-    contrat = st.select_slider("Enchère", options=["Petite", "Pousse", "Garde", "Garde Sans", "Garde Contre"])
-    
-    if nb_joueurs == 5:
-        partenaire = st.selectbox("Partenaire", st.session_state.joueurs + ["Au Chien / Seul"])
-        mode_partage = st.radio("Partage des points", ["2/3-1/3", "50/50"], horizontal=True)
-    else:
-        partenaire, mode_partage = None, None
-
+    preneur = st.selectbox("Preneur", st.session_state.joueurs, key=f"pre_{k}")
+    contrat = st.select_slider("Enchère", ["Petite", "Pousse", "Garde", "Garde Sans", "Garde Contre"], key=f"con_{k}")
+    part = st.selectbox("Partenaire", st.session_state.joueurs + ["Au Chien / Seul"], key=f"par_{k}") if nb_j == 5 else None
 with col2:
-    st.markdown("### 📊 Le Résultat")
-    points_faits = st.number_input("Points du preneur", 0, 91, 41)
-    bouts = st.radio("Nombre de bouts", [0, 1, 2, 3], horizontal=True)
-    petit_au_bout = st.checkbox("Petit au bout")
-    chelem = st.selectbox("Prime Chelem", ["Aucun", "Grand Chelem Annoncé & Réussi", "Grand Chelem Non annoncé & Réussi", "Grand Chelem Annoncé & Chuté", "Petit Chelem Annoncé & Réussi", "Petit Chelem Non annoncé & Réussi", "Petit Chelem Annoncé & Chuté"])
+    pts = st.number_input("Points faits", 0, 91, 41, key=f"pts_{k}")
+    bouts = st.radio("Bouts", [0, 1, 2, 3], horizontal=True, key=f"bt_{k}")
+    petit_bout = st.checkbox("Petit au bout", key=f"pb_{k}")
+    chelem = st.selectbox("Chelem", ["Aucun", "Grand Chelem Annoncé & Réussi", "Grand Chelem Non annoncé & Réussi", "Grand Chelem Annoncé & Chuté", "Petit Chelem Annoncé & Réussi", "Petit Chelem Non annoncé & Réussi", "Petit Chelem Annoncé & Chuté"], key=f"chl_{k}")
 
-st.write("---")
-st.markdown("### 🎖️ Poignées & Misères")
-p_cols = st.columns(nb_joueurs)
-poignees_saisies = {}
-for i in range(nb_joueurs):
+st.write("### 🎖️ Poignées & Misères")
+p_cols = st.columns(nb_j)
+poignees = {}
+for i in range(nb_j):
     with p_cols[i]:
         st.write(f"{st.session_state.avatars[i]} **{st.session_state.joueurs[i]}**")
-        p_type = st.selectbox("Poignée", ["Aucune", "Simple", "Double", "Triple"], key=f"p_val_{i}")
-        poignees_saisies[st.session_state.joueurs[i]] = p_type
-
-miseres = st.multiselect("Qui a une Misère ?", st.session_state.joueurs)
+        poignees[st.session_state.joueurs[i]] = st.selectbox("P.", ["Aucune", "Simple", "Double", "Triple"], key=f"p_val_{i}_{k}")
+miseres = st.multiselect("Misères", st.session_state.joueurs, key=f"mis_{k}")
 
 if st.button("✅ VALIDER LA DONNE", use_container_width=True, type="primary"):
-    res = calculer_points(contrat, points_faits, bouts, petit_au_bout, poignees_saisies, nb_joueurs, mode_partage, partenaire, preneur, miseres, chelem)
-    
-    donne_data = {"Donne": len(st.session_state.historique) + 1}
-    for j in st.session_state.joueurs:
-        donne_data[j] = res[j]
-    st.session_state.historique.append(donne_data)
-    st.success("Donne enregistrée !")
+    res = calculer_points(contrat, pts, bouts, petit_bout, poignees, nb_j, "2/3-1/3", part, preneur, miseres, chelem)
+    st.session_state.historique.append(res)
+    st.session_state.compteur_donne += 1
     st.rerun()
 
-# --- VISUELS ---
+# --- SCOREBOARD ---
 if st.session_state.historique:
-    df_tot = pd.DataFrame(st.session_state.historique).set_index('Donne')[st.session_state.joueurs].cumsum()
-    dernier_score = df_tot.iloc[-1].sort_values(ascending=False)
-    
-    def get_av(nom):
-        return st.session_state.avatars[st.session_state.joueurs.index(nom)]
-
-    st.write("---")
-    st.subheader("🏆 Podium Actuel")
-    pod = st.columns(3)
-    ranks = [("🥇", 0, pod[1]), ("🥈", 1, pod[0]), ("🥉", 2, pod[2])]
-    for symbol, idx, display in ranks:
-        if len(dernier_score) > idx:
-            name = dernier_score.index[idx]
-            display.metric(f"{symbol} {get_av(name)} {name}", f"{int(dernier_score[idx])} pts")
-
-    st.warning(f"🟡 **SOUS-MARIN JAUNE** 🚢\n\nLes rescapés : **{get_av(dernier_score.index[-2])} {dernier_score.index[-2]}** & **{get_av(dernier_score.index[-1])} {dernier_score.index[-1]}**")
-    
-    st.line_chart(df_tot)
+    df = pd.DataFrame(st.session_state.historique).cumsum()
+    scores = df.iloc[-1].sort_values(ascending=False)
+    st.divider()
+    st.subheader("🏆 Classement")
+    c = st.columns(3)
+    for i, s in enumerate([("🥇", 1), ("🥈", 0), ("🥉", 2)]):
+        if len(scores) > i:
+            name = scores.index[i]
+            av = st.session_state.avatars[st.session_state.joueurs.index(name)]
+            c[s[1]].metric(f"{s[0]} {av} {name}", f"{int(scores[i])} pts")
+    st.warning(f"🟡 **SOUS-MARIN** : {scores.index[-1]} & {scores.index[-2]} 🚢")
+    st.line_chart(df)
