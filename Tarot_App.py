@@ -1,5 +1,5 @@
 import streamlit as st
-import pd
+import pandas as pd
 import random
 
 # Configuration
@@ -7,17 +7,11 @@ st.set_page_config(page_title="Tarot Master Pro", layout="wide")
 
 LISTE_AVATARS = ["🧙", "🥷", "🧛", "🤴", "👸", "🤡", "👹", "🤠", "🤖", "👻", "👽", "🦄", "🐼", "🦊", "🦁"]
 
-# --- INITIALISATION DES PARAMÈTRES PAR DÉFAUT ---
+# --- INITIALISATION ---
 if 'bareme' not in st.session_state:
     st.session_state.bareme = {
-        "base": 25,
-        "petit_bout": 10,
-        "poignee_s": 20,
-        "poignee_d": 30,
-        "poignee_t": 40,
-        "misere": 10
+        "base": 25, "petit_bout": 10, "poignee_s": 20, "poignee_d": 30, "poignee_t": 40, "misere": 10
     }
-
 if 'historique' not in st.session_state:
     st.session_state.historique = []
 if 'joueurs' not in st.session_state:
@@ -36,18 +30,13 @@ def calculer_points(contrat, pts, bouts, petit_bout, poignees, nb_j, part, prene
     seuils = {0: 56, 1: 51, 2: 41, 3: 36}
     diff = pts - seuils[bouts]
     reussi = diff >= 0
-    
     score_base = b["base"] + abs(diff)
     if petit_bout: score_base += b["petit_bout"]
-    
     coeffs = {"Petite": 1, "Pousse": 2, "Garde": 4, "Garde Sans": 8, "Garde Contre": 16}
     score_final = score_base * coeffs[contrat]
-    
     primes_ch = {"Aucun": 0, "Grand Chelem Annoncé & Réussi": 400, "Grand Chelem Non annoncé & Réussi": 200, "Grand Chelem Annoncé & Chuté": -200, "Petit Chelem Annoncé & Réussi": 200, "Petit Chelem Non annoncé & Réussi": 100, "Petit Chelem Annoncé & Chuté": -100}
     score_final += primes_ch[chelem]
-
     res = {nom: 0 for nom in st.session_state.joueurs}
-    
     if nb_j == 4:
         p_tot = score_final * 3 if reussi else -score_final * 3
         for j in st.session_state.joueurs:
@@ -64,7 +53,6 @@ def calculer_points(contrat, pts, bouts, petit_bout, poignees, nb_j, part, prene
                 if j == preneur: res[j] = p_pre
                 elif j == part: res[j] = p_par
                 else: res[j] = -(p_pre + p_par) / 3
-
     val_p = {"Simple": b["poignee_s"], "Double": b["poignee_d"], "Triple": b["poignee_t"]}
     for j_nom, p_type in poignees.items():
         if p_type != "Aucune":
@@ -85,7 +73,6 @@ def calculer_points(contrat, pts, bouts, petit_bout, poignees, nb_j, part, prene
 with st.sidebar:
     st.title("⚙️ Paramètres")
     nb_j = st.radio("Nombre de joueurs", [4, 5], horizontal=True)
-    
     with st.expander("👤 Équipage & Noms", expanded=True):
         for i in range(nb_j):
             c1, c2 = st.columns([1, 4])
@@ -93,17 +80,14 @@ with st.sidebar:
                 changer_avatar(i)
                 st.rerun()
             st.session_state.joueurs[i] = c2.text_input(f"Nom {i}", st.session_state.joueurs[i], label_visibility="collapsed")
-
     with st.expander("📊 Barème des points"):
-        st.session_state.bareme["base"] = st.number_input("Base contrat", value=25, step=5)
-        st.session_state.bareme["petit_bout"] = st.number_input("Petit au bout", value=10, step=5)
-        st.session_state.bareme["misere"] = st.number_input("Misère", value=10, step=5)
+        st.session_state.bareme["base"] = st.number_input("Base contrat", value=st.session_state.bareme["base"], step=5)
+        st.session_state.bareme["petit_bout"] = st.number_input("Petit au bout", value=st.session_state.bareme["petit_bout"], step=5)
+        st.session_state.bareme["misere"] = st.number_input("Misère", value=st.session_state.bareme["misere"], step=5)
         st.write("**Poignées :**")
-        st.session_state.bareme["poignee_s"] = st.number_input("Simple", value=20, step=5)
-        st.session_state.bareme["poignee_d"] = st.number_input("Double", value=30, step=5)
-        st.session_state.bareme["poignee_t"] = st.number_input("Triple", value=40, step=5)
-
-    st.write("---")
+        st.session_state.bareme["poignee_s"] = st.number_input("Simple", value=st.session_state.bareme["poignee_s"], step=5)
+        st.session_state.bareme["poignee_d"] = st.number_input("Double", value=st.session_state.bareme["poignee_d"], step=5)
+        st.session_state.bareme["poignee_t"] = st.number_input("Triple", value=st.session_state.bareme["poignee_t"], step=5)
     if st.button("🗑️ Reset la partie"):
         st.session_state.historique = []
         st.rerun()
@@ -111,7 +95,6 @@ with st.sidebar:
 # --- MAIN ---
 st.title("🃏 Tarot Master Pro")
 k = st.session_state.compteur_donne
-
 col1, col2 = st.columns(2)
 with col1:
     st.markdown("### 🏹 L'Attaque")
