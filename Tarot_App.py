@@ -8,7 +8,10 @@ LISTE_AVATARS = ["🧙", "🥷", "🧛", "🤴", "👸", "🤡", "👹", "🤠",
 
 # --- INITIALISATION ---
 if 'bareme' not in st.session_state:
-    st.session_state.bareme = {"base": 25, "petit_bout": 10, "pb_variable": False, "p_s": 20, "p_d": 30, "p_t": 40, "misere": 10}
+    st.session_state.bareme = {
+        "base": 25, "petit_bout": 10, "pb_variable": False,
+        "p_s": 20, "p_d": 30, "p_t": 40, "misere": 10
+    }
 if 'historique' not in st.session_state:
     st.session_state.historique = []
 if 'joueurs' not in st.session_state:
@@ -73,10 +76,17 @@ with st.sidebar:
             if c1.button(st.session_state.avatars[i], key=f"av_{i}"):
                 st.session_state.avatars[i] = random.choice(LISTE_AVATARS); st.rerun()
             st.session_state.joueurs[i] = c2.text_input(f"J{i}", value=st.session_state.joueurs[i], placeholder=f"Joueur {i+1}", label_visibility="collapsed")
-    with st.expander("📊 Barème"):
+    
+    with st.expander("📊 Barème & Primes", expanded=True):
         st.session_state.bareme["base"] = st.number_input("Base", value=st.session_state.bareme["base"], step=5)
-        st.session_state.bareme["petit_bout"] = st.number_input("Petit bout", value=st.session_state.bareme["petit_bout"], step=5)
+        st.session_state.bareme["petit_bout"] = st.number_input("Petit au bout", value=st.session_state.bareme["petit_bout"], step=5)
         st.session_state.bareme["pb_variable"] = st.toggle("PB prix de la prise", value=st.session_state.bareme["pb_variable"])
+        st.divider()
+        st.session_state.bareme["p_s"] = st.number_input("Poignée Simple", value=st.session_state.bareme["p_s"], step=5)
+        st.session_state.bareme["p_d"] = st.number_input("Poignée Double", value=st.session_state.bareme["p_d"], step=5)
+        st.session_state.bareme["p_t"] = st.number_input("Poignée Triple", value=st.session_state.bareme["p_t"], step=5)
+        st.session_state.bareme["misere"] = st.number_input("Misère", value=st.session_state.bareme["misere"], step=5)
+    
     if st.button("🗑️ Reset Partie"): st.session_state.historique = []; st.rerun()
 
 # --- MAIN ---
@@ -110,14 +120,13 @@ if nb_j == 5:
 
 st.divider()
 # --- ZONE DE SCORE SYNCHRONISÉE ---
-col_score_1, col_score_2 = st.columns([1, 1.2])
+col_score_1, col_score_2 = st.columns([1, 1.5])
 
 with col_score_1:
     contrat = st.select_slider("Enchère", ["Petite", "Pousse", "Garde", "Garde Sans", "Garde Contra"], key=f"ct_{k}")
     bouts = st.radio("Bouts", [0, 1, 2, 3], horizontal=True, key=f"bt_{k}")
     mode_saisie = st.radio("Saisie :", ["Défense", "Preneur"], horizontal=True, key=f"md_{k}")
     
-    # Initialisation de la valeur de base si vide
     if f"pts_bruts_{k}" not in st.session_state:
         st.session_state[f"pts_bruts_{k}"] = 40.0 if mode_saisie == "Défense" else 51.0
 
@@ -129,31 +138,38 @@ with col_score_1:
     diff_score = pts_pre - seuils[bouts]
 
 with col_score_2:
-    st.write("### Résultat du contrat")
-    # Affichage du bouton FAITE / CHUTÉE
+    st.write("### Résultat")
+    
+    # Affichage en ligne : [FAITE] [SCORE] [+/-]
+    res_col1, res_col2, res_col3 = st.columns([2, 1, 1])
+    
     bg_color = "#2ECC71" if diff_score >= 0 else "#E74C3C"
     label_res = "FAITE" if diff_score >= 0 else "CHUTÉE"
     
-    st.markdown(f"""
-        <div style="display: flex; align-items: center; gap: 20px;">
-            <div style="background-color:{bg_color}; color:white; padding:20px 40px; border-radius:15px; font-size:40px; font-weight:bold; text-align:center; min-width:200px;">
+    with res_col1:
+        st.markdown(f"""
+            <div style="background-color:{bg_color}; color:white; padding:15px; border-radius:12px; font-size:35px; font-weight:bold; text-align:center;">
                 {label_res}
             </div>
-            <div style="font-size: 50px; font-weight: bold; color: {'#2ECC71' if diff_score >= 0 else '#E74C3C'};">
+        """, unsafe_allow_html=True)
+    
+    with res_col2:
+        st.markdown(f"""
+            <div style="font-size: 45px; font-weight: bold; color: {bg_color}; text-align: center; line-height: 60px;">
                 {'+' if diff_score >= 0 else ''}{diff_score:g}
             </div>
-        </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+        
+    with res_col3:
+        if st.button("➕", key=f"add_{k}", use_container_width=True):
+            st.session_state[f"pts_bruts_{k}"] += 1.0 if mode_saisie == "Preneur" else -1.0
+            st.rerun()
+        if st.button("➖", key=f"sub_{k}", use_container_width=True):
+            st.session_state[f"pts_bruts_{k}"] -= 1.0 if mode_saisie == "Preneur" else -1.0
+            st.rerun()
     
-    # Boutons +/- pour ajuster la différence
     st.write("")
-    c_plus, c_moins = st.columns(2)
-    if c_plus.button("➕ Augmenter (+1)", use_container_width=True):
-        st.session_state[f"pts_bruts_{k}"] += 1.0; st.rerun()
-    if c_moins.button("➖ Diminuer (-1)", use_container_width=True):
-        st.session_state[f"pts_bruts_{k}"] -= 1.0; st.rerun()
-    
-    st.info(f"Points Preneur : **{pts_pre:g}** / Points Défense : **{91-pts_pre:g}**")
+    st.info(f"Preneur : **{pts_pre:g}** / Défense : **{91-pts_pre:g}**")
     pb_res = st.selectbox("Petit au bout", ["Aucun", "Attaque", "Défense"], key=f"pb_{k}")
     chelem = st.selectbox("Chelem", ["Aucun", "Grand Chelem Réussi", "Grand Chelem Chuté", "Petit Chelem Réussi"], key=f"ch_{k}")
 
@@ -168,12 +184,7 @@ for i in range(nb_j):
         poignees[nom_j] = st.selectbox("Poignée", ["Aucune", "Simple", "Double", "Triple"], key=f"po_{i}_{k}", label_visibility="collapsed")
 miseres = st.multiselect("Misères", [get_nom(i) for i in range(nb_j)], key=f"mi_{k}")
 
-b1, b2 = st.columns([2, 1])
-if b1.button("🔥 VALIDER LA DONNE", use_container_width=True, type="primary"):
-    res = calculer_points(contrat, pts_pre, bouts, pb_res, poignees, nb_j, st.session_state[f"sel_par_{k}"], st.session_state[f"sel_pre_{k}"], miseres, chelem, mode_partage)
-    st.session_state.historique.append(res); st.session_state.compteur_donne += 1; st.rerun()
-if b2.button("↩️ Annuler", use_container_width=True) and st.session_state.historique:
-    st.session_state.historique.pop(); st.session_state.compteur_donne -= 1; st.rerun()
+st.button("🔥 VALIDER LA DONNE", on_click=lambda: st.session_state.historique.append(calculer_points(contrat, pts_pre, bouts, pb_res, poignees, nb_j, st.session_state[f"sel_par_{k}"], st.session_state[f"sel_pre_{k}"], miseres, chelem, mode_partage)) or st.session_state.__setitem__('compteur_donne', st.session_state.compteur_donne + 1), use_container_width=True, type="primary")
 
 if st.session_state.historique:
     df = pd.DataFrame(st.session_state.historique).cumsum().rename(columns={f"S{i}": get_nom(i) for i in range(nb_j)})
